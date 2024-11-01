@@ -1,0 +1,53 @@
+name: Rust CI
+
+on: [ push, pull_request ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      # Set up Rust toolchain
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Cache dependencies to speed up builds
+      - uses: Swatinem/rust-cache@v2
+
+      # Run tests
+      - name: Run tests
+        run: cargo test
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      # Set nightly Rust toolchain for rustfmt
+      - name: Set nightly toolchain as default
+        run: rustup default nightly
+
+      - name: Add rustfmt component
+        run: rustup component add rustfmt
+
+      - name: Enforce formatting
+        run: cargo fmt --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run Clippy linter
+        run: cargo clippy -- -D warnings
