@@ -1,15 +1,14 @@
-# water
+# rain-stream
 
-Water is a hobby project for ingesting and processing large and concurrent streams of data from CSV files.
+This is a hobby project for ingesting and processing large and concurrent streams of data from CSV files.
 In this example, CSV data represent transactions such as deposit, withdraw, dispute, etc being done against
 client accounts.
 
 # Requirements and Tasks
 
 - [ ] An integration test that always passed and 'hello world' is printed by calling hello_word method of app
-    - [ ] scaffold basic project with code fmt tool and settings in IDE updated
-    - [ ] run application as a task so that integration test can be run against
-    - [ ] run an integration tests that call hello_world method
+    - [x] scaffold basic project with code fmt tool and settings in IDE updated
+    - [ ] run an integration tests that call `hello_world` method
     - [ ] create Git CI build flow and make sure it passes and runs the integration test
 
 - [ ] An integration test that ingest a CSV file contains the following CSV data
