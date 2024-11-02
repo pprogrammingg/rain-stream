@@ -4,6 +4,17 @@ This is a hobby project for ingesting and processing large and concurrent stream
 In this example, CSV data represent transactions such as deposit, withdraw, dispute, etc being done against
 client accounts.
 
+# Design Decisions Overview
+
+The tx engine does few major functions:
+
+- Read CSV one record at the time since order of rows is assumed to represent chronological orde).
+- Each record is deserialized and put in an incoming tx queue for a specific client.
+- A notification system notifies the system to spawn a tx_processor task when client queue receives incoming tx.
+- Final result of processing is persisted in `balances` table of a database, with a transaction history keeping record
+  of processed tx.
+- Output will be the query of `balances` table to stdout.
+
 # Requirements and Tasks
 
 - [x] An integration test that always passes and `hello world` is printed by calling hello_word method of app
@@ -24,10 +35,11 @@ client accounts.
 
 
 - [ ] Sub-tasks:
-    - [ ] In arrange phase of the test CSV must be read from CLI and passed to the app
-    - [ ] efficiency: use techniques that does not load whole CSV at once rather reading done in batches of
-      `MAX_ROWS_TO_READ` rows at the time
+    - [x] Add helper function to write CSV. This will be used during each test to write a CSV.
+    - [x] In arrange phase of the test create a CSV with name "basic_read.csv". Delete the file after reading is done.
     - [ ] Once read the output object containing parsed CSV data should match what the input data gave
+    - [ ] Efficiency: use techniques that does not load whole CSV at once rather reading done in batches of
+      `MAX_ROWS_TO_READ` rows at the time
     - [ ] code csv_read method containing some default config vars like `MAX_ROWS_TO_READ`. These configs will
       later on move to proper configuration file at startup
     - [ ] concurrency: when CSV file arrives, spawn the read function to be its own separate task

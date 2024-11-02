@@ -23,40 +23,19 @@ fn test_csv_read() {
     // output
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // // error
-    // let stderr = String::from_utf8_lossy(&output.stderr);
-    //
-    println!("stdout: {}", stdout);
-    // println!("stderr: {}", stderr);
-    //
-    // if !stderr.is_empty() {
-    //     eprintln!("Error output: {}", stderr);
-    // }
-    //
-    // assert!(
-    //     stdout.contains("type,client,tx,amount"),
-    //     "Header not found in output"
-    // );
-    // assert!(
-    //     stdout.contains("deposit,1,1,1.0"),
-    //     "Expected deposit record not found in output"
-    // );
-    // assert!(
-    //     stdout.contains("deposit,2,2,2.0"),
-    //     "Expected deposit record not found in output"
-    // );
-    // assert!(
-    //     stdout.contains("deposit,1,3,2.0"),
-    //     "Expected deposit record not found in output"
-    // );
-    // assert!(
-    //     stdout.contains("withdrawal,1,4,1.5"),
-    //     "Expected withdrawal record not found in output"
-    // );
-    // assert!(
-    //     stdout.contains("withdrawal,2,5,3.0"),
-    //     "Expected withdrawal record not found in output"
-    // );
+    let expected_output = "\
+                StringRecord([\"deposit\", \"1\", \"1\", \"1.0\"])\n\
+                StringRecord([\"deposit\", \"2\", \"2\", \"2.0\"])\n\
+                StringRecord([\"deposit\", \"1\", \"3\", \"2.0\"])\n\
+                StringRecord([\"withdrawal\", \"1\", \"4\", \"1.5\"])\n\
+                StringRecord([\"withdrawal\", \"2\", \"5\", \"3.0\"])\n";
+
+    assert_eq!(
+        stdout, expected_output,
+        "The output does not match the expected format"
+    );
+
+    // println!("stdout: {}\n", stdout);
 
     // remove file
     let _ = std::fs::remove_file(csv_path);
