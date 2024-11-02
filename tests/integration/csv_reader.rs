@@ -23,20 +23,19 @@ fn test_csv_read() {
     // output
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    let expected_output = "\
-                StringRecord([\"deposit\", \"1\", \"1\", \"1.0\"])\n\
-                StringRecord([\"deposit\", \"2\", \"2\", \"2.0\"])\n\
-                StringRecord([\"deposit\", \"1\", \"3\", \"2.0\"])\n\
-                StringRecord([\"withdrawal\", \"1\", \"4\", \"1.5\"])\n\
-                StringRecord([\"withdrawal\", \"2\", \"5\", \"3.0\"])\n";
+    let expected_output = "TransactionRecord { transaction_type: Deposit, client_id: 1, transaction_id: 1, amount: 1.0 }\n\
+                TransactionRecord { transaction_type: Deposit, client_id: 2, transaction_id: 2, amount: 2.0 }\n\
+                TransactionRecord { transaction_type: Deposit, client_id: 1, transaction_id: 3, amount: 2.0 }\n\
+                TransactionRecord { transaction_type: Withdrawal, client_id: 1, transaction_id: 4, amount: 1.5 }\n\
+                TransactionRecord { transaction_type: Withdrawal, client_id: 2, transaction_id: 5, amount: 3.0 }\n";
 
     assert_eq!(
         stdout, expected_output,
         "The output does not match the expected format"
     );
 
-    // println!("stdout: {}\n", stdout);
+    println!("stdout:\n{:?}", stdout);
 
     // remove file
-    let _ = std::fs::remove_file(csv_path);
+    //let _ = std::fs::remove_file(csv_path);
 }
