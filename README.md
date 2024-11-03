@@ -76,7 +76,7 @@ process those asynchronously.
     - [x] Once read the output object containing parsed CSV data should match what the input data gave
     - [x] Efficiency: make CSV reading an independent task spawned so other processes do not have to wait for it
     - [x] Deserialize read records to a Rust tx record type with field types per requirement
-    - [ ] rows read are parsed to Rust struct and inserted in client specific incoming tx queues
+    - [ ] create client queue manager module, rows read in csv are inserted in client specific incoming tx queues
     - [ ] write unit test to check rows read are separated and put in the right queues
     - [ ] integration test when no input file is provided in the CLI
     - [ ] integration test when file path of CSV is invalid
@@ -188,6 +188,9 @@ but should not crash app
     - [ ] 500M txs
     - [ ] 1B txs
     - [ ] 2B txs
-         
 
+# Questions and Insights
+
+- task::spawn(async move { async_read_csv(csv_path).await });
+  means make sure async_read_csv starts running 
 

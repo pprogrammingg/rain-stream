@@ -1,30 +1,11 @@
+use crate::domain::TransactionRecord;
+use crate::transactions_queue::TransactionsQueue;
 use csv::{ReaderBuilder, Trim};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::sync::Arc;
 use thiserror::Error;
-
-#[derive(serde::Deserialize, Debug)]
-pub struct TransactionRecord {
-    #[serde(rename = "type")]
-    transaction_type: TransactionType,
-    #[serde(rename = "client")]
-    client_id: u16,
-    #[serde(rename = "tx")]
-    transaction_id: u32,
-    #[serde(rename = "amount")]
-    amount: f32,
-}
-
-#[derive(serde::Deserialize, Debug)]
-#[serde(rename_all = "lowercase")]
-pub enum TransactionType {
-    Deposit,
-    Withdrawal,
-    Dispute,
-    Resolve,
-    Chargeback,
-}
 
 #[derive(Error, Debug)]
 pub enum CsvReadError {
@@ -43,7 +24,10 @@ pub fn open_csv(path: String) -> Result<File, CsvReadError> {
     File::open(path.clone()).map_err(|_| CsvReadError::IoReadError(path))
 }
 
-pub async fn async_read_csv(path: String) -> Result<Vec<TransactionRecord>, CsvReadError> {
+pub async fn read_csv(
+    path: String,
+    transactions_queue: Arc<TransactionsQueue>,
+) -> Result<Vec<TransactionRecord>, CsvReadError> {
     let file = open_csv(path)?;
     let reader = BufReader::new(file);
     let mut records: Vec<TransactionRecord> = Vec::new();
@@ -60,5 +44,6 @@ pub async fn async_read_csv(path: String) -> Result<Vec<TransactionRecord>, CsvR
         }
     }
 
+    println!("Returning from read_csv");
     Ok(records)
 }

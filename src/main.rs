@@ -1,10 +1,15 @@
-use crate::csv_reader::{async_read_csv, CsvReadError};
+use crate::csv_reader::{read_csv, CsvReadError};
+use crate::transactions_manager::TransactionsManager;
+use crate::transactions_queue::TransactionsQueue;
 use std::env;
 use std::io::Write;
 use thiserror::Error;
 use tokio::task;
 
 mod csv_reader;
+mod domain;
+mod transactions_manager;
+mod transactions_queue;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -14,6 +19,16 @@ pub enum AppError {
     ArgsLengthError,
 }
 
+///
+/// 1. Init transaction_manager
+///     a. starts an async loop within `listen_for_incoming_client_transactions`
+///     b. returns an instance of `TransactionQueue` to be passed to `read_csv` task (see below)
+///
+/// 2. Async Start `read_csv` passing it `csv_path` from command args and `TransactionQueue`.
+///
+/// 3. At the end of the main, make sure `read_csv` finishes and any task spawned by
+/// `transactions_manager` is finished before exiting.
+///
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     // Read CSV file path from command line arguments, assume single CSV being supplied
@@ -22,10 +37,18 @@ async fn main() -> Result<(), AppError> {
         return Err(AppError::ArgsLengthError);
     }
 
+    // 1. Start TransactionsManager
+    let manager = TransactionsManager::start();
+
+    // Retrieve the TransactionsQueue for use in read_csv task
+    let transactions_queue = manager.get_transaction_queue();
+
     let csv_path = args[1].clone();
 
-    let reader_handle = task::spawn(async_read_csv(csv_path));
+    // 2.
+    let reader_handle = task::spawn(async move { read_csv(csv_path, transactions_queue).await });
 
+    // 3.
     // Wait for the reader task to finish
     let records = reader_handle.await.unwrap()?;
 
