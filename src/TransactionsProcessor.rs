@@ -65,18 +65,35 @@ impl TransactionProcessor {
     ) {
         for record in records {
             // Insert transaction record into history
-            let mut history = transactions_history
-                .write()
-                .await;
-            history.insert(record.transaction_id, record);
-            drop(history); // Release lock on transactions_history early
+            {
+                let mut history = transactions_history
+                    .write()
+                    .await;
+                history.insert(record.transaction_id, record);
+            }
 
             // Process the record and update client account
             let mut accounts = client_accounts.write().await;
             if let Some(account) = accounts.get_mut(&client_id) {
                 match record.transaction_type {
-                    TransactionType::Deposit => account.available += record.amount,
-                    TransactionType::Withdrawal => account.available -= record.amount,
+                    TransactionType::Deposit => {
+                        account.available =
+                            Self::round_to_four_decimals(account.available + record.amount)
+                    }
+                    TransactionType::Withdrawal => {
+                        let temp = account.available - record.amount;
+                        if temp < 0.0 {
+                            // ignore withdrawal, if it causes negative available
+                            println!(
+                                "WARNING!!! available balance {} is \
+                                        not enough for withdrawal amount {}",
+                                account.available, record.amount
+                            );
+                            continue;
+                        }
+
+                        account.available = Self::round_to_four_decimals(temp)
+                    }
                     TransactionType::Dispute => {
                         // Custom logic for resolving disputes
                     }
@@ -87,9 +104,15 @@ impl TransactionProcessor {
                         // Custom logic for chargebacks
                     }
                 }
+                // get total balance
                 account.total = account.available + account.held;
+                println!("account is : {:?}", account);
             }
         }
+    }
+
+    fn round_to_four_decimals(value: f32) -> f32 {
+        (value * 10_000.0).round() / 10_000.0
     }
 }
 
@@ -104,36 +127,7 @@ mod tests {
     async fn test_process_client_records() {
         // Arrange
         let client_id = 1;
-        let transaction_id_1 = 1;
-        let transaction_id_2 = 2;
-        let transaction_id_3 = 3;
-        let transaction_id_4 = 4;
-
-        let record1 = TransactionRecord {
-            transaction_type: TransactionType::Deposit,
-            client_id,
-            transaction_id: transaction_id_1,
-            amount: 1.9234,
-        };
-        let record2 = TransactionRecord {
-            transaction_type: TransactionType::Deposit,
-            client_id,
-            transaction_id: transaction_id_2,
-            amount: 23.352_577,
-        };
-        let record3 = TransactionRecord {
-            transaction_type: TransactionType::Withdrawal,
-            client_id,
-            transaction_id: transaction_id_3,
-            amount: 50.234_35,
-        };
-        let record4 = TransactionRecord {
-            transaction_type: TransactionType::Withdrawal,
-            client_id,
-            transaction_id: transaction_id_4,
-            amount: 20.435434,
-        };
-        let records = vec![record1, record2, record3, record4];
+        let records = create_test_records_simple_withrawal_deposit(client_id);
 
         // Initialize shared maps for client_accounts and transactions_history
         let client_accounts: SharedMap<ClientId, Account> = Arc::new(RwLock::new(HashMap::new()));
@@ -157,7 +151,7 @@ mod tests {
         // Run the function
         TransactionProcessor::process_client_records(
             client_id,
-            records,
+            records.clone(),
             Arc::clone(&client_accounts),
             Arc::clone(&transactions_history),
         )
@@ -170,9 +164,9 @@ mod tests {
                 .get(&client_id)
                 .expect("Account not found");
 
-            assert_eq!(account.available, 1.0);
-            assert_eq!(account.total, 1.0);
-            assert_eq!(account.available, 1.0);
+            assert_eq!(account.available, 4.8405);
+            assert_eq!(account.held, 0.0);
+            assert_eq!(account.total, 4.8405);
             assert!(!account.locked);
         }
 
@@ -181,10 +175,44 @@ mod tests {
             let history = transactions_history
                 .read()
                 .await;
-            assert_eq!(history.get(&transaction_id_1), Some(&record1));
-            assert_eq!(history.get(&transaction_id_2), Some(&record2));
-            assert_eq!(history.get(&transaction_id_3), Some(&record1));
-            assert_eq!(history.get(&transaction_id_4), Some(&record2));
+            assert_eq!(history.get(&1), Some(&records[0]));
+            assert_eq!(history.get(&2), Some(&records[1]));
+            assert_eq!(history.get(&3), Some(&records[2])); // transaction_id_1
+            assert_eq!(history.get(&4), Some(&records[3]));
         }
+    }
+
+    fn create_test_records_simple_withrawal_deposit(client_id: ClientId) -> Vec<TransactionRecord> {
+        let transaction_id_1 = 1;
+        let transaction_id_2 = 2;
+        let transaction_id_3 = 3;
+        let transaction_id_4 = 4;
+
+        let record1 = TransactionRecord {
+            transaction_type: TransactionType::Deposit,
+            client_id,
+            transaction_id: transaction_id_1,
+            amount: 1.9234,
+        };
+        let record2 = TransactionRecord {
+            transaction_type: TransactionType::Deposit,
+            client_id,
+            transaction_id: transaction_id_2,
+            amount: 23.3525,
+        };
+        let record3 = TransactionRecord {
+            transaction_type: TransactionType::Withdrawal,
+            client_id,
+            transaction_id: transaction_id_3,
+            amount: 50.234,
+        };
+        let record4 = TransactionRecord {
+            transaction_type: TransactionType::Withdrawal,
+            client_id,
+            transaction_id: transaction_id_4,
+            amount: 20.4354,
+        };
+
+        vec![record1, record2, record3, record4]
     }
 }
