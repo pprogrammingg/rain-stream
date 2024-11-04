@@ -6,6 +6,7 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::mpsc;
 
 #[derive(Error, Debug)]
 pub enum CsvReadError {
@@ -27,6 +28,7 @@ pub fn open_csv(path: String) -> Result<File, CsvReadError> {
 pub async fn read_csv(
     path: String,
     transactions_queue: Arc<TransactionsQueue>,
+    sender: mpsc::Sender<u16>,
 ) -> Result<Vec<TransactionRecord>, CsvReadError> {
     let file = open_csv(path)?;
     let reader = BufReader::new(file);
@@ -37,13 +39,22 @@ pub async fn read_csv(
         .trim(Trim::All)
         .from_reader(reader);
 
-    for result in csv_reader.deserialize() {
+    for result in csv_reader.deserialize::<TransactionRecord>() {
         match result {
-            Ok(record) => records.push(record),
+            Ok(record) => {
+                // transactions_queue
+                //     .enqueue(record.client_id, record, sender.clone())
+                //     .await;
+                let sender = sender.clone();
+                tokio::spawn(async move {
+                    println!("processing record {:?}", record);
+                });
+                records.push(record)
+            }
             Err(err) => return Err(CsvReadError::IoReadError(err.to_string())),
         }
     }
 
-    println!("Returning from read_csv");
+    println!("returning from read_csv");
     Ok(records)
 }

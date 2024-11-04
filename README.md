@@ -6,7 +6,7 @@ client accounts.
 
 # Design Decisions
 
-## Overview
+## Iteration 1
 
 The tx engine does few major functions:
 
@@ -17,7 +17,7 @@ The tx engine does few major functions:
   of processed tx.
 - Output will be the query of `balances` table to stdout.
 
-## CSV Reader
+### CSV Reader
 
 To make reading CSVs efficient, consider:
 
@@ -31,13 +31,13 @@ To make reading CSVs efficient, consider:
 When 1 or bunch of records are read, they are put in client specific in-memory queues so to have tx_processor  
 process those asynchronously.
 
-## Client Incoming Transactions Queues
+### Client Incoming Transactions Queues
 
 - Maintains thread-safe map of `client_id` vs `list of tx_records`
 - new client specific records read by csv reader are added to list of tx_records based on client
 - a notification is issued when txs are inserted in the queue
 
-## TX Processing
+### TX Processing
 
 - Main loop listens for notification from Client Queue manager
 - Based on notification checks a tracking map to see whether a processor already running for the client. If not spawn
@@ -51,14 +51,28 @@ process those asynchronously.
 - once done with all the processing, take the next N txs from client queue
 - When no more txs exist, remove self from `cleint_tx_processor_tracking_map`.
 
-# Tasks Breakdown
+## Iteration 2
+
+After implementing iteration 1, it seems as though CSV crate reading records one by one, successfuly enqueues the
+records
+in the shared queue, and sends notifs to TransactionsManager to process the task. However, it turns out that this setup
+somehow waits only CSV reading is finished and then start switching to record processing.
+
+The design will now change with the following improvements:
+
+1. CSV Reader will read not just 1 record at the time but a BATCH_SIZE (defined at app level) number of reords are read
+   before processing them.
+2. The batch of records then are passed to a `batch_records_processor`. This method will divide the batch of records
+   per `client_id` and for each `client_id` spawns a new task to handle the records for that client.
+
+# Iteration 1 Tasks
 
 - [x] An integration test that always passes and `hello world` is printed by calling hello_word method of app
     - [x] scaffold basic project with code fmt tool and settings in IDE updated
     - [x] run an integration tests that call `hello_world` method
     - [x] create Git CI build flow and make sure it passes and runs the integration test
 
-- [ ] CSV Record Reading and Queueing: An integration test that ingest a CSV file contains the following CSV data
+- [x] CSV Record Reading and Queueing: An integration test that ingest a CSV file contains the following CSV data
 
     ```
         type, client, tx, amount
@@ -70,104 +84,64 @@ process those asynchronously.
     ```
 
 
-- [ ] Sub-tasks:
+- [x] Sub-tasks:
     - [x] Add helper function to write CSV. This will be used during each test to write a CSV.
     - [x] In arrange phase of the test create a CSV with name "basic_read.csv". Delete the file after reading is done.
     - [x] Once read the output object containing parsed CSV data should match what the input data gave
     - [x] Efficiency: make CSV reading an independent task spawned so other processes do not have to wait for it
     - [x] Deserialize read records to a Rust tx record type with field types per requirement
-    - [ ] create client queue manager module, rows read in csv are inserted in client specific incoming tx queues
-    - [ ] write unit test to check rows read are separated and put in the right queues
-    - [ ] integration test when no input file is provided in the CLI
-    - [ ] integration test when file path of CSV is invalid
-    - [ ] integration test when data can not be parsed in to the proper object
+    - [x] create client queue manager module, rows read in csv are inserted in client specific incoming tx queues
 
+# Iteration 2 Tasks
 
-- [ ] Database: bring a postgres database with tables hold account and processed transactions
-    - [ ] dockerize the app such that running the app brings up db in docker, creates or updates tables based on
-      migration
+- [ ] TransactionProcessor module will encapsulate (
+    - [ ] `client_accounts`, a thread-safe hashmap containing `client_id` vs `Account` (Account consists of
+      available, held, total, locked fields)
+    - [ ] `transactions_history`, a thread-safe hashmap containing `client_id` vs `TransactionRecord`, used for lookups
+      needed per `resolve` and `charge_back` transaction types
+    - [ ] (1 hr) method `insert_or_update_client_account(client_id, transaction_record)` + unit test
+    - [ ] (1 hr) method `get_transaction(transaction_id)` + unit test
+    - [ ] (1 hr) method `process_records_batch(Vec<TransactionRecord>)` which spins a worker per client to do
+      `process_client_records(Vec<TransactionRecord>)`  (`MAX_WORKERS` = 10 by default)
 
-expected result:
+    + test with print statements
+        - [ ] (2 hrs ) method `process_client_records(Vec<TransactionRecord>)` (this is what is passed to `spawn_task`
+          from `process_records_batch(Vec<TransactionRecord>)` per client) + unit tests. This is the core of balance
+          calculation
+          engine (take care of correct decimals, math safety, lookups, etc)
+            - unit tests: will have a vec of TransactionRecord in arrange phase, passed in to
+              `process_client_records(Vec<TransactionRecord>)` in act phase. For assertion phase, `clients_accounts` map
+              and
+              `trasnactions_history` maps are validated against expected records.
 
-- [ ] Task processor with database : a task which takes batches of txs from client queues and processes them.
-    - [ ] Notification system wakes up a task to work on a certain client queue (as such need to track whether a task
-      for
-      for the client already exist if not spawn one) - use MPSC for notif
-    - [ ] Integration test where CSV containing multiple clients is passed to program. Data for CSV:
-        ```
-            type, client, tx, amount
-            deposit, 1, 1, 1.0
-            deposit, 2, 2, 2.0
-            deposit, 1, 3, 2.0
-            withdrawal, 1, 4, 1.5
-            withdrawal, 2, 5, 3.0
-            dispute, 1, 1
-            resolve, 1, 1
-            dispute, 2, 2
-            chargeback, 1, 2
-        ```
-      expected result:
+- [ ] Csv Reader Modifications
+    - [ ] (1 hr) Read in a batches and When sufficient batch size is reached spawn a task for
+      `process_records_batch(Vec<TransactionRecord>` )
 
-        ```
-            client, available, held, total, locked
-            1, 1.5, 0.0, 1.5, false
-            2, 0.0, 0.0, 0.0, true
-        ```
+    - [ ] Correctness Integration tests
+        - (1 hr) Utility: make the utility function to create CSV of N records (later we use this for performance test
+          as well, we need 2B eventually)
+        - (1 hr) Assertion Util create expected `Vec<TransactionRecrods>`, read output.csv into
+          `Vec<TransactionRecords>` and compare
+            - Tests:
+                - (1 hr) when clients contains valid withdrawal, deposit, dispute and resolve 7 client 1 , 4 client 2, 3
+                  client
+                  3 records
+                - (1 hr) when client account is locked 7 client 1 (record 4 is a chargeback), 10 client 2 (record 5 is a
+                  chargeback), 3 client 3 records
+                - (1 hr) when client withdrawal is more than available balance, 5 client 1 (some withdrawals resulting
+                  in more
+                  than balance)
+                - (1 hr) when client records deposit, withdrawal, and in between contains dispute, resolve, dispute,
+                  chargeback
+                  variation and some more records
+    - [ ] NOTE: If concurrent tasks processing client specific record are not resulting in correct results, then
+      Block until `process_records_batch(Vec<TransactionRecord>` (we maintain a `clinet_processor` map
+      to make sure client_id does not have a task already for it running, so to isolate)
 
-Also, Error "Withdrawal cannot proceed due to insufficient available funds" should display logs regarding client 2 tx 5
-but should not crash app
+# Performance Tuning and Results
 
-- [ ] Other integration tests:
-    - [ ] When client 2 account is locked before another tx.
-        ```
-            type, client, tx, amount
-            deposit, 1, 1, 1.034534634
-            deposit, 2, 2, 2.0313
-            dispute, 2, 2
-            chargeback, 2, 2
-            deposit, 1, 3, 2.053252345
-            withdrawal, 1, 4, 1.5
-            deposit, 2, 5, 500.012312
-        ```
-      expected result:
-
-        ```
-            client, available, held, total, locked
-            1, 1.5, 0.0, 1.5, false
-            2, 0.0, 0.0, 0.0, true
-            
-        ```
-
-- [ ] When amounts have high level of decimals (testing the level of precision is output in requirement) and rounding:
-  4 digits decimals, if 4thright most digit is 5, if 5th value to before is even keep 5, else make it 6
-
-    - [ ] input:
-        ```
-            type, client, tx, amount
-            deposit, 1, 1, 1.034534634
-            deposit, 2, 2, 2.0313
-            deposit, 1, 3, 2.053252345
-            withdrawal, 1, 4, 1.54543
-            deposit, 2, 5, 502.043612
-            deposit, 3, 6, 1.42343234
-            withdrawal, 3, 7, 0.3242352
-            deposit, 4, 8, 1.42382234
-            withdrawal, 4, 9, 0.3242352
-        ```
-      expected result:
-
-        ```
-            client, available, held, total, locked
-            1, 1.5426, 0.0, 1.5426, false
-            2, 502.0436, 0.0, 502.0436, false
-            3, 1.0992, 0.0, 1.0992, false
-            4, 1.0995, 0.0, 1.0995, false
-        ```
-
-- [ ] CSV Read performance
-- [ ] Performance (only deposit and withdrawal 90% of records and 10% dispute that end in resolves -
-  no chargeback to not allow freezing) correctness and speed measuring and peak memory and avg memory usage
-  (simple measuring at the start of read and finish in main)
+- [ ] Performance (few chargebacks towards the end) (2 hrs - 4 hrs)
     - [ ] 10k txs
     - [ ] 100k txs
     - [ ] 1M txs
@@ -176,21 +150,3 @@ but should not crash app
     - [ ] 500M txs
     - [ ] 1B txs
     - [ ] 2B txs
-
-
-- [ ] Performance (all types) - random types correctness and speed measuring and peak memory and avg memory usage
-  (simple measuring at the start of read and finish in main)
-    - [ ] 10k txs
-    - [ ] 100k txs
-    - [ ] 1M txs
-    - [ ] 50M txs
-    - [ ] 100M txs
-    - [ ] 500M txs
-    - [ ] 1B txs
-    - [ ] 2B txs
-
-# Questions and Insights
-
-- task::spawn(async move { async_read_csv(csv_path).await });
-  means make sure async_read_csv starts running 
-

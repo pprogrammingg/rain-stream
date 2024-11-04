@@ -1,13 +1,13 @@
-#[derive(serde::Deserialize, Debug)]
+#[derive(serde::Deserialize, Debug, Clone, Copy)]
 pub struct TransactionRecord {
     #[serde(rename = "type")]
-    transaction_type: TransactionType,
+    pub transaction_type: TransactionType,
     #[serde(rename = "client")]
-    client_id: u16,
+    pub client_id: u16,
     #[serde(rename = "tx")]
-    transaction_id: u32,
+    pub transaction_id: u32,
     #[serde(rename = "amount")]
-    amount: f32,
+    pub amount: f32,
 }
 
 #[derive(serde::Deserialize, Debug, Clone, Copy)]

@@ -2,7 +2,7 @@ use crate::csv_reader::{read_csv, CsvReadError};
 use crate::transactions_manager::TransactionsManager;
 use crate::transactions_queue::TransactionsQueue;
 use std::env;
-use std::io::Write;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::task;
 
@@ -38,24 +38,28 @@ async fn main() -> Result<(), AppError> {
     }
 
     // 1. Start TransactionsManager
-    let manager = TransactionsManager::start();
-
-    // Retrieve the TransactionsQueue for use in read_csv task
-    let transactions_queue = manager.get_transaction_queue();
+    let TransactionsManager {
+        queue,
+        sender,
+        receiver,
+    } = TransactionsManager::new();
 
     let csv_path = args[1].clone();
 
-    // 2.
-    let reader_handle = task::spawn(async move { read_csv(csv_path, transactions_queue).await });
+    let reader_handle =
+        task::spawn_blocking(move || read_csv(csv_path, Arc::clone(&queue), sender));
 
     // 3.
     // Wait for the reader task to finish
-    let records = reader_handle.await.unwrap()?;
+    let records = reader_handle
+        .await
+        .unwrap()
+        .await?;
 
     // Output the records
-    for record in records {
-        println!("{:?}", record);
-    }
+    // for record in records {
+    //     println!("{:?}", record);
+    // }
 
     Ok(())
 }
