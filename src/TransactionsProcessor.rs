@@ -77,22 +77,26 @@ impl TransactionProcessor {
             if let Some(account) = accounts.get_mut(&client_id) {
                 match record.transaction_type {
                     TransactionType::Deposit => {
-                        account.available =
-                            Self::round_to_four_decimals(account.available + record.amount)
+                        if let Some(amount) = record.amount {
+                            account.available =
+                                Self::round_to_four_decimals(account.available + amount)
+                        }
                     }
                     TransactionType::Withdrawal => {
-                        let temp = account.available - record.amount;
-                        if temp < 0.0 {
-                            // ignore withdrawal, if it causes negative available
-                            println!(
-                                "WARNING!!! available balance {} is \
+                        if let Some(amount) = record.amount {
+                            let temp = account.available - amount;
+                            if temp < 0.0 {
+                                // ignore withdrawal, if it causes negative available
+                                println!(
+                                    "WARNING!!! available balance {} is \
                                         not enough for withdrawal amount {}",
-                                account.available, record.amount
-                            );
-                            continue;
-                        }
+                                    account.available, amount
+                                );
+                                continue;
+                            }
 
-                        account.available = Self::round_to_four_decimals(temp)
+                            account.available = Self::round_to_four_decimals(temp)
+                        }
                     }
                     TransactionType::Dispute => {
                         // Custom logic for resolving disputes
@@ -192,25 +196,59 @@ mod tests {
             transaction_type: TransactionType::Deposit,
             client_id,
             transaction_id: transaction_id_1,
-            amount: 1.9234,
+            amount: Some(1.9234),
         };
         let record2 = TransactionRecord {
             transaction_type: TransactionType::Deposit,
             client_id,
             transaction_id: transaction_id_2,
-            amount: 23.3525,
+            amount: Some(23.3525),
         };
         let record3 = TransactionRecord {
             transaction_type: TransactionType::Withdrawal,
             client_id,
             transaction_id: transaction_id_3,
-            amount: 50.234,
+            amount: Some(50.234),
         };
         let record4 = TransactionRecord {
             transaction_type: TransactionType::Withdrawal,
             client_id,
             transaction_id: transaction_id_4,
-            amount: 20.4354,
+            amount: Some(20.4354),
+        };
+
+        vec![record1, record2, record3, record4]
+    }
+
+    fn create_test_records_with_dispute_resolved(client_id: ClientId) -> Vec<TransactionRecord> {
+        let transaction_id_1 = 1;
+        let transaction_id_2 = 2;
+        let transaction_id_3 = 3;
+        let transaction_id_4 = 4;
+
+        let record1 = TransactionRecord {
+            transaction_type: TransactionType::Deposit,
+            client_id,
+            transaction_id: transaction_id_1,
+            amount: Some(1.9234),
+        };
+        let record2 = TransactionRecord {
+            transaction_type: TransactionType::Deposit,
+            client_id,
+            transaction_id: transaction_id_2,
+            amount: Some(23.3525),
+        };
+        let record3 = TransactionRecord {
+            transaction_type: TransactionType::Withdrawal,
+            client_id,
+            transaction_id: transaction_id_3,
+            amount: Some(50.234),
+        };
+        let record4 = TransactionRecord {
+            transaction_type: TransactionType::Withdrawal,
+            client_id,
+            transaction_id: transaction_id_4,
+            amount: Some(20.4354),
         };
 
         vec![record1, record2, record3, record4]

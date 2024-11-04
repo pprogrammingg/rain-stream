@@ -7,7 +7,7 @@ pub struct TransactionRecord {
     #[serde(rename = "tx")]
     pub transaction_id: u32,
     #[serde(rename = "amount")]
-    pub amount: f32,
+    pub amount: Option<f32>,
 }
 
 #[derive(serde::Deserialize, Debug, Clone, Copy, PartialEq, PartialOrd)]
