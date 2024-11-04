@@ -104,7 +104,7 @@ The design will now change with the following improvements:
     - [ ] (1 hr) method `process_records_batch(Vec<TransactionRecord>)` which spins a worker per client to do
       `process_client_records(Vec<TransactionRecord>)`  (`MAX_WORKERS` = 10 by default)
 
-    + test with print statements
+    - [ ] test with print statements
         - [ ] (2 hrs ) method `process_client_records(Vec<TransactionRecord>)` (this is what is passed to `spawn_task`
           from `process_records_batch(Vec<TransactionRecord>)` per client) + unit tests. This is the core of balance
           calculation
@@ -118,26 +118,23 @@ The design will now change with the following improvements:
     - [ ] (1 hr) Read in a batches and When sufficient batch size is reached spawn a task for
       `process_records_batch(Vec<TransactionRecord>` )
 
-    - [ ] Correctness Integration tests
-        - (1 hr) Utility: make the utility function to create CSV of N records (later we use this for performance test
-          as well, we need 2B eventually)
-        - (1 hr) Assertion Util create expected `Vec<TransactionRecrods>`, read output.csv into
-          `Vec<TransactionRecords>` and compare
-            - Tests:
-                - (1 hr) when clients contains valid withdrawal, deposit, dispute and resolve 7 client 1 , 4 client 2, 3
-                  client
-                  3 records
-                - (1 hr) when client account is locked 7 client 1 (record 4 is a chargeback), 10 client 2 (record 5 is a
-                  chargeback), 3 client 3 records
-                - (1 hr) when client withdrawal is more than available balance, 5 client 1 (some withdrawals resulting
-                  in more
-                  than balance)
-                - (1 hr) when client records deposit, withdrawal, and in between contains dispute, resolve, dispute,
-                  chargeback
-                  variation and some more records
-    - [ ] NOTE: If concurrent tasks processing client specific record are not resulting in correct results, then
-      Block until `process_records_batch(Vec<TransactionRecord>` (we maintain a `clinet_processor` map
-      to make sure client_id does not have a task already for it running, so to isolate)
+- [ ] Functionality tests
+    - (1 hr) Utility: make the utility function to create CSV of N records (later we use this for performance test
+      as well, we need 2B eventually)
+    - (1 hr) Assertion Util create expected `Vec<TransactionRecrods>`, read output.csv into
+      `Vec<TransactionRecords>` and compare
+        - Tests:
+            - (1 hr) when clients contains valid withdrawal, deposit, dispute and resolve 7 client 1 , 4 client 2, 3
+              client 3 records
+            - (1 hr) when client account is locked 7 client 1 (record 4 is a chargeback), 10 client 2 (record 5 is a
+              chargeback), 3 client 3 records
+            - (1 hr) when client withdrawal is more than available balance, 5 client 1 (some withdrawals resulting
+              in more than balance)
+            - (1 hr) when client records deposit, withdrawal, and in between contains dispute, resolve, dispute,
+              chargeback variation and some more records
+- [ ] NOTE: If concurrent tasks processing client specific record are not resulting in correct results, then
+  Block until `process_records_batch(Vec<TransactionRecord>` (we maintain a `clinet_processor` map
+  to make sure client_id does not have a task already for it running, so to isolate)
 
 # Performance Tuning and Results
 

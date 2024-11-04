@@ -1,4 +1,4 @@
-#[derive(serde::Deserialize, Debug, Clone, Copy)]
+#[derive(serde::Deserialize, Debug, Clone, Copy, PartialOrd, PartialEq)]
 pub struct TransactionRecord {
     #[serde(rename = "type")]
     pub transaction_type: TransactionType,
@@ -10,7 +10,7 @@ pub struct TransactionRecord {
     pub amount: f32,
 }
 
-#[derive(serde::Deserialize, Debug, Clone, Copy)]
+#[derive(serde::Deserialize, Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[serde(rename_all = "lowercase")]
 pub enum TransactionType {
     Deposit,

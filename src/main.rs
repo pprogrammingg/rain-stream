@@ -6,6 +6,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::task;
 
+mod TransactionsProcessor;
 mod csv_reader;
 mod domain;
 mod transactions_manager;
