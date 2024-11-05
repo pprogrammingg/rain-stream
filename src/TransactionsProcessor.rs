@@ -62,7 +62,14 @@ impl TransactionProcessor {
         println!("Writing to Transactions history: {:?}", transaction);
     }
 
-    /// Processes a batch of transactions by client, managing concurrency with a maximum worker limit.
+    /// Processes a batch of transactions for a mixed number of clients.
+    /// 1. organize the batch in a map (client vs list of records)
+    /// 2. Run through the map, for each client
+    ///     a. If worker count already more than max amount of workers, continue the loop
+    ///     b. if no worker is spawned (check client_worker_map) then spawn `process_client_records`
+    ///     for that client. Update client_worker_map to add worker as active for the client.
+    ///     c. once task is done for the client, remove worker from client_work_map
+    ///     
     pub async fn process_records_batch(&self, records: Vec<TransactionRecord>) {
         unimplemented!()
     }
@@ -92,9 +99,10 @@ impl TransactionProcessor {
             .write()
             .await;
 
-        // here we look up account aagain
+        // look up the client account
         if let Some(account) = accounts.get_mut(&client_id) {
             for record in records {
+                // locked account means no processing
                 if account.locked {
                     println!("Account is locked, no further processing can take place!");
                     break;
@@ -185,12 +193,6 @@ impl TransactionProcessor {
                                         account.held, amount
                                     );
                                 }
-                            } else {
-                                // If no amount was found on the transaction,
-                                // just give warning and ignore (similar to if transaction not found)
-                                println!(
-                                    "WARNING!!! Referenced transaction does not have an amount"
-                                );
                             }
                         } else {
                             // If the transaction does not exist, ignore the record and continue
@@ -215,12 +217,6 @@ impl TransactionProcessor {
 
                                 account.locked = true;
                                 println!("locking account for client {}!", record.client_id);
-                            } else {
-                                // If no amount was found on the transaction,
-                                // just give warning and ignore (similar to if transaction not found)
-                                println!(
-                                    "WARNING!!! Referenced transaction does not have an amount"
-                                );
                             }
                         } else {
                             // If the transaction does not exist, ignore the record and continue
