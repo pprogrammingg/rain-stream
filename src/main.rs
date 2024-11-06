@@ -1,10 +1,14 @@
 use crate::csv_reader::{read_csv, CsvReadError};
-use crate::transactions_manager::TransactionsManager;
+use crate::domain::TransactionRecord;
 use crate::transactions_queue::TransactionsQueue;
+use crate::TransactionsProcessor::{Account, ClientId, SharedMap, TransactionId};
+use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::RwLock;
 use tokio::task;
+use tokio::task::JoinHandle;
 
 mod TransactionsProcessor;
 mod csv_reader;
@@ -15,52 +19,72 @@ mod transactions_queue;
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error(transparent)]
-    CsvRead(#[from] CsvReadError),
+    CsvReadError(#[from] CsvReadError),
     #[error("Exactly one argument must be provided to represent the CSV path.")]
     ArgsLengthError,
 }
 
 ///
-/// 1. Init transaction_manager
-///     a. starts an async loop within `listen_for_incoming_client_transactions`
-///     b. returns an instance of `TransactionQueue` to be passed to `read_csv` task (see below)
-///
-/// 2. Async Start `read_csv` passing it `csv_path` from command args and `TransactionQueue`.
-///
-/// 3. At the end of the main, make sure `read_csv` finishes and any task spawned by
-/// `transactions_manager` is finished before exiting.
-///
+/// 1. Instantiate TransactionProcessor
+/// 2. Clone and pass in SharedMaps for client_accounts and transactions_history to read_csv
+/// Note: read_csv should spawn as a separate task
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
-    // Read CSV file path from command line arguments, assume single CSV being supplied
+    // Read CSV file path from command line arguments, assume a single CSV being supplied
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         return Err(AppError::ArgsLengthError);
     }
 
-    // 1. Start TransactionsManager
-    let TransactionsManager {
-        queue,
-        sender,
-        receiver,
-    } = TransactionsManager::new();
-
     let csv_path = args[1].clone();
+    println!("Processing CSV file at path: {}", csv_path);
 
-    let reader_handle =
-        task::spawn_blocking(move || read_csv(csv_path, Arc::clone(&queue), sender));
+    // Create shared maps to track status
+    let client_accounts: SharedMap<ClientId, Account> = Arc::new(RwLock::new(HashMap::new()));
+    let transactions_history: SharedMap<TransactionId, TransactionRecord> =
+        Arc::new(RwLock::new(HashMap::new()));
+    let client_worker_map: SharedMap<ClientId, JoinHandle<()>> =
+        Arc::new(RwLock::new(HashMap::new()));
 
-    // 3.
-    // Wait for the reader task to finish
-    let records = reader_handle
-        .await
-        .unwrap()
-        .await?;
+    // Spawn CSV reading and processing task
+    let reader_handle = task::spawn({
+        let client_accounts = Arc::clone(&client_accounts);
+        let transactions_history = Arc::clone(&transactions_history);
+        let client_worker_map = Arc::clone(&client_worker_map);
+        async move {
+            read_csv(
+                csv_path,
+                client_accounts,
+                transactions_history,
+                client_worker_map,
+            )
+            .await
+        }
+    });
 
-    // Output the records
-    // for record in records {
-    //     println!("{:?}", record);
-    // }
+    // Await the reader task's completion
+    reader_handle.await.unwrap()?;
+
+    // Print the final state of `client_accounts`
+    println!("----------------------------");
+    println!("Done, client_accounts is");
+    print_client_accounts_2(&client_accounts).await;
+    println!("____________________________");
 
     Ok(())
+}
+
+/// Prints `client_accounts` to stdout.
+async fn print_client_accounts(client_accounts: &SharedMap<ClientId, Account>) {
+    let client_accounts = client_accounts.read().await;
+
+    println!("Final state of client_accounts:");
+    for (client_id, account) in client_accounts.iter() {
+        println!("Client ID: {:?}, Account: {:?}", client_id, account);
+    }
+}
+
+async fn print_client_accounts_2(client_accounts: &SharedMap<ClientId, Account>) {
+    let accounts = client_accounts.read().await;
+    println!("{:?}", *accounts); // Replace with your account printing logic
 }

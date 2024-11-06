@@ -1,11 +1,11 @@
 use crate::domain::{TransactionRecord, TransactionType};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
-type ClientId = u16;
-type TransactionId = u32;
+pub type ClientId = u16;
+pub type TransactionId = u32;
 #[derive(Debug, Clone)]
 pub struct Account {
     available: f32,
@@ -14,11 +14,12 @@ pub struct Account {
     locked: bool,
 }
 
-type SharedMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
+pub type SharedMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 
 pub struct TransactionProcessor {
     client_accounts: SharedMap<ClientId, Account>,
     transactions_history: SharedMap<TransactionId, TransactionRecord>,
+    client_worker_map: SharedMap<ClientId, VecDeque<JoinHandle<()>>>,
 }
 
 const MAX_WORKERS: usize = 4;
@@ -29,6 +30,7 @@ impl TransactionProcessor {
         Self {
             client_accounts: Arc::new(RwLock::new(HashMap::new())),
             transactions_history: Arc::new(RwLock::new(HashMap::new())),
+            client_worker_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -89,19 +91,98 @@ impl TransactionProcessor {
         println!("Writing to Transactions history: {:?}", transaction);
     }
 
+    /// Process a batch of records in a client-aware manner to prevent overlapping tasks for the same client.
+    // pub async fn client_aware_process_records_batch(
+    //     records: Vec<TransactionRecord>,
+    //     client_accounts: SharedMap<ClientId, Account>,
+    //     transactions_history: SharedMap<TransactionId, TransactionRecord>,
+    //     client_worker_map: Arc<RwLock<HashMap<ClientId, VecDeque<JoinHandle<()>>>>>,
+    // ) {
+    //     println!("Entering client_aware_process_records_batch");
+    //     println!("================================");
+    //
+    //     // Organize the batch by client_id
+    //     let mut client_records_map: HashMap<ClientId, Vec<TransactionRecord>> = HashMap::new();
+    //     for record in records {
+    //         client_records_map
+    //             .entry(record.client_id)
+    //             .or_default()
+    //             .push(record);
+    //     }
+    //
+    //     println!("client_records_map: {:?}", client_records_map);
+    //     println!("================================");
+    //
+    //     for (client_id, client_records) in client_records_map {
+    //         let client_accounts = Arc::clone(&client_accounts);
+    //         let transactions_history = Arc::clone(&transactions_history);
+    //
+    //         let handle = tokio::task::spawn(async move {
+    //             TransactionProcessor::process_client_records(
+    //                 client_id,
+    //                 client_records,
+    //                 &client_accounts,
+    //                 &transactions_history,
+    //             )
+    //             .await;
+    //         });
+    //
+    //         // Manage client tasks in client_worker_map to ensure only one task per client at a time
+    //         let mut map = client_worker_map
+    //             .write()
+    //             .await;
+    //         let client_queue = map
+    //             .entry(client_id)
+    //             .or_default();
+    //
+    //         client_queue.push_back(handle);
+    //         println!(
+    //             "pushed worker handle for client {} to worker map",
+    //             client_id
+    //         );
+    //         println!("================================");
+    //     }
+    //
+    //     let mut map = client_worker_map
+    //         .write()
+    //         .await;
+    //
+    //     println!("client_worker_map is : {:?}", map);
+    //     for (client_id, queue) in map.iter_mut() {
+    //         println!("Processing tasks for client {}", client_id);
+    //         println!("================================");
+    //
+    //         while let Some(handle) = queue.pop_front() {
+    //             println!("Awaiting worker task for client {}", client_id);
+    //             println!("================================");
+    //
+    //             handle
+    //                 .await
+    //                 .expect("Failed to await task");
+    //
+    //             println!("Finished processing worker task for client {}", client_id);
+    //             println!("================================");
+    //         }
+    //     }
+    //
+    //     println!("Exiting client_aware_process_records_batch");
+    //     println!("================================");
+    // }
+
     /// Processes a batch of transactions for a mixed number of clients.
     /// 1. organize the batch in a map (client vs list of records)
     /// 2. Run through the map, for each client
     ///     a. If worker count already more than max amount of workers, continue the loop
     ///     b. if no worker is spawned (check client_worker_map) then spawn `process_client_records`
-    ///     for that client. Update client_worker_map to add worker as active for the client.
+    ///     do not process the client unless its associated task is done.
     ///     c. once task is done for the client, remove worker from client_work_map
     ///     
-    pub async fn process_records_batch(&mut self, records: Vec<TransactionRecord>) {
-        // clone shared maps
-        let client_accounts = Arc::clone(&self.client_accounts);
-        let transactions_history = Arc::clone(&self.transactions_history);
-
+    pub async fn process_records_batch(
+        records: Vec<TransactionRecord>,
+        client_accounts: SharedMap<ClientId, Account>,
+        transactions_history: SharedMap<TransactionId, TransactionRecord>,
+        client_worker_map: SharedMap<ClientId, JoinHandle<()>>,
+    ) {
         // Organize the batch by client_id
         let mut client_records_map: HashMap<ClientId, Vec<TransactionRecord>> = HashMap::new();
         for record in records {
@@ -111,95 +192,97 @@ impl TransactionProcessor {
                 .push(record);
         }
 
-        // println!("client_records_map is {:?}", client_records_map);
-        // println!("================================");
-
-        // Create a map to track client vs worker JoinHandle (we do not want a client to be processed
-        // if there is a worker already processing it)
-        let mut client_worker_map: HashMap<ClientId, JoinHandle<()>> = HashMap::new();
-
-        // use a JoinSet to await all tasks in a cooperatively scheduled way
-        // let mut join_set = JoinSet::new();
+        println!("client_records_map is {:?}", client_records_map);
+        println!("================================");
 
         // Keep looping until all client records are processed
         while !client_records_map.is_empty() {
-            // list of clients being processed
             let mut clients_being_processed = vec![];
 
-            // loop through clients_record_map, if max_workers not reached, spawn a worker to process client records
+            // Iterate through client_records_map to spawn tasks
             for (client_id, client_records) in client_records_map.iter_mut() {
-                // need to print key values directly for print as clients_records_map cannot be passed here (since it is borrowed mutably)
-                // println!(
-                //     "client_records_map record: client_id: {:?}, client_records: {:?}",
-                //     client_id, client_records
-                // );
-                // println!("================================");
-
-                // if max_workers not reached
-                if client_worker_map.len() < MAX_WORKERS {
-                    // Spawn a worker for the client
-                    // remove the records list for the client from the map and return it as a new vector
-                    // this new vector gets passed to worker
-                    let records_to_process = std::mem::take(client_records);
-                    let client_id_copy = *client_id; // Needed due to ownership
-
-                    let client_accounts = Arc::clone(&self.client_accounts);
-                    let transactions_history = Arc::clone(&self.transactions_history);
-                    // Spawn async task for the client
-                    let handle = tokio::spawn(async move {
-                        TransactionProcessor::process_client_records(
-                            client_id_copy,
-                            records_to_process,
-                            &client_accounts.clone(),
-                            &transactions_history.clone(),
-                        )
-                        .await;
-                    });
-
-                    // Add the task handle to JoinSet
-                    // join_set.spawn(handle);
-
-                    // Update the map to mark worker as active for this client
-                    client_worker_map.insert(client_id_copy, handle);
-                    println!("client_worker_map: {:?}", client_worker_map);
-                    println!("================================");
-                } else {
-                    // If max workers reached, break early to wait for workers to finish
-                    println!("max_workers count has reached, wait for workers to finish");
-                    println!("================================");
-                    break;
+                // Check if client already has an active task, if so continue
+                {
+                    let client_worker_map_read = client_worker_map.read().await;
+                    if client_worker_map_read.contains_key(client_id) {
+                        println!("Client {} already has an active task", client_id);
+                        continue;
+                    }
                 }
 
-                // Remove any clients that have drained all records
+                // Check if max worker limit has been reached, if so continue
+                {
+                    let client_worker_map_read = client_worker_map.read().await;
+                    if client_worker_map_read.len() >= MAX_WORKERS {
+                        println!("Max worker count reached; waiting for workers to finish.");
+                        continue;
+                    }
+                }
+
+                let records_to_process = std::mem::take(client_records);
+                let client_id_copy = *client_id;
+
+                let client_accounts = Arc::clone(&client_accounts);
+                let transactions_history = Arc::clone(&transactions_history);
+
+                // Spawn async task for the client
+                let handle = tokio::spawn(async move {
+                    TransactionProcessor::process_client_records(
+                        client_id_copy,
+                        records_to_process,
+                        &client_accounts,
+                        &transactions_history,
+                    )
+                    .await;
+                });
+
+                // update client_worker_map with the handle
+                {
+                    let mut client_worker_map_write = client_worker_map
+                        .write()
+                        .await;
+                    client_worker_map_write.insert(client_id_copy, handle);
+                    println!("client_worker_map: {:?}", client_worker_map_write);
+                    println!("===========================================");
+                }
+
+                // Push client to clients_being_processed list
                 if client_records.is_empty() {
                     clients_being_processed.push(*client_id);
                 }
             }
 
-            // Clean up clients being processed
+            // Important! Remove processed clients from client_records_map (otherwise we keep processing)
             for client_id in clients_being_processed {
                 client_records_map.remove(&client_id);
             }
 
-            //  Sequentially await and remove completed workers
+            // list of complete_clients
             let mut completed_clients = vec![];
 
-            for (client_id, handle) in client_worker_map.iter_mut() {
-                if let Ok(()) = handle.await {
-                    completed_clients.push(*client_id);
+            // Await handles in client_worker_map to complete
+            {
+                let mut client_worker_map_write = client_worker_map
+                    .write()
+                    .await;
+                for (client_id, handle) in client_worker_map_write.iter_mut() {
+                    if handle.await.is_ok() {
+                        println!("Completed task for client_id {}", client_id);
+                        println!("===========================================");
+                        completed_clients.push(*client_id);
+                    }
+                }
+
+                // Clean up completed clients from client_worker_map
+                for client_id in completed_clients {
+                    println!("Removing client_id {} from client_worker_map", client_id);
+                    println!("===========================================");
+                    client_worker_map_write.remove(&client_id);
                 }
             }
-
-            // Remove completed clients from client_worker_map
-            for client_id in completed_clients {
-                println!("removing client_id {} from client_workers_map", client_id);
-                println!("================================");
-                client_worker_map.remove(&client_id);
-            }
-
-            // Pause briefly to allow other tasks to run
-            // tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         }
+        // Small sleep to prevent tight looping
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
 
     /// Core processing logic for client records, updating account balances and transaction history.
@@ -222,18 +305,29 @@ impl TransactionProcessor {
         client_accounts: &SharedMap<ClientId, Account>,
         transactions_history: &SharedMap<TransactionId, TransactionRecord>,
     ) {
-        println!("Starting worker task for client_id {}", client_id);
-        println!("******************************************");
-        // Process the record and update client account
-        let mut accounts = client_accounts.write().await;
+        // Verify the transaction history
+        // {
+        //     let transaction_history_read = transactions_history
+        //         .read()
+        //         .await;
+        //     println!("transactions_history: {:?}", transaction_history_read);
+        // }
 
-        // look up the client account
-        if let Some(account) = accounts.get_mut(&client_id) {
-            let batch_size = 20; // Process 20 records at a time
+        // println!(
+        //     "Starting worker task for client_id {} and records {:?}",
+        //     client_id, records
+        // );
+        // println!("******************************************");
 
-            for chunk in records.chunks(batch_size) {
-                // Process each chunk of 20 records
-                for record in chunk {
+        //
+        TransactionProcessor::ensure_client_account(client_id, Arc::clone(client_accounts)).await;
+        {
+            // Process the record and update client account
+            let mut accounts = client_accounts.write().await;
+
+            // look up the client account
+            if let Some(account) = accounts.get_mut(&client_id) {
+                for record in records {
                     // locked account means no processing
                     if account.locked {
                         println!("Account is locked, no further processing can take place!");
@@ -250,7 +344,7 @@ impl TransactionProcessor {
                                 // update transactions history
                                 Self::insert_transaction_in_history(
                                     transactions_history.clone(),
-                                    record.clone(),
+                                    record,
                                 )
                                 .await;
                             }
@@ -263,7 +357,7 @@ impl TransactionProcessor {
                                     account.available = Self::round_to_four_decimals(temp);
                                     Self::insert_transaction_in_history(
                                         transactions_history.clone(),
-                                        record.clone(),
+                                        record,
                                     )
                                     .await;
                                 } else {
@@ -393,14 +487,27 @@ impl TransactionProcessor {
                     println!("account is : {:?}", account);
                     println!("******************************************");
                 }
-
-                // After processing a chunk, yield so other clients work can finish
-                tokio::task::yield_now().await;
             }
         }
 
         println!("Exiting worker task for client_id {}", client_id);
         println!("******************************************");
+    }
+
+    async fn ensure_client_account(
+        client_id: ClientId,
+        client_accounts: SharedMap<ClientId, Account>,
+    ) {
+        // Insert a default record if client account does not exist
+        let mut accounts = client_accounts.write().await;
+        accounts
+            .entry(client_id)
+            .or_insert_with(|| Account {
+                available: 0.0,
+                held: 0.0,
+                total: 0.0,
+                locked: false,
+            });
     }
 
     fn round_to_four_decimals(value: f32) -> f32 {
@@ -645,26 +752,13 @@ mod tests {
     #[tokio::test]
     async fn test_process_client_batch_records_deposit_withdrawal() {
         // Arrange
-        let client_id_1 = 1;
-        let client_id_2 = 2;
-        let client_id_3 = 3;
-        let client_id_4 = 4;
-        let transaction_id_1 = 1;
-        let transaction_id_2 = 2;
-        let transaction_id_3 = 3;
-        let transaction_id_4 = 4;
-        let transaction_id_5 = 5;
-
         let records = create_test_records_batch();
 
         let client_accounts: SharedMap<ClientId, Account> = Arc::new(RwLock::new(HashMap::new()));
         let transactions_history: SharedMap<TransactionId, TransactionRecord> =
             Arc::new(RwLock::new(HashMap::new()));
-
-        let mut processor = TransactionProcessor {
-            client_accounts: client_accounts.clone(),
-            transactions_history: transactions_history.clone(),
-        };
+        let client_worker_map: SharedMap<ClientId, JoinHandle<()>> =
+            Arc::new(RwLock::new(HashMap::new()));
 
         // init account balance for client
         {
@@ -683,9 +777,13 @@ mod tests {
         }
 
         // Act
-        processor
-            .process_records_batch(records.clone())
-            .await;
+        TransactionProcessor::process_records_batch(
+            records.clone(),
+            client_accounts,
+            transactions_history,
+            client_worker_map,
+        )
+        .await;
 
         // Assert client account balances
         // {
@@ -852,8 +950,8 @@ mod tests {
             }
         }
 
-        // Create 70 records for client 3
-        for _ in 0..70 {
+        // Create very large amount of records for client 3
+        for _ in 0..7 {
             records.push(TransactionRecord {
                 transaction_type: TransactionType::Deposit,
                 client_id: 3,
