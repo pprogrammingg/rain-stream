@@ -95,24 +95,21 @@ The design will now change with the following improvements:
 # Iteration 2 Tasks
 
 - [ ] TransactionProcessor module will encapsulate (
-    - [ ] `client_accounts`, a thread-safe hashmap containing `client_id` vs `Account` (Account consists of
+    - [x] `client_accounts`, a thread-safe hashmap containing `client_id` vs `Account` (Account consists of
       available, held, total, locked fields)
-    - [ ] `transactions_history`, a thread-safe hashmap containing `client_id` vs `TransactionRecord`, used for lookups
+    - [x] `transactions_history`, a thread-safe hashmap containing `client_id` vs `TransactionRecord`, used for lookups
       needed per `resolve` and `charge_back` transaction types
-    - [ ] (1 hr) method `insert_or_update_client_account(client_id, transaction_record)` + unit test
-    - [ ] (1 hr) method `get_transaction(transaction_id)` + unit test
+    - [x] (1 hr) method `insert_or_update_client_account(client_id, transaction_record)` + unit test
+    - [x] (1 hr) method `get_transaction(transaction_id)` + unit test
     - [ ] (1 hr) method `process_records_batch(Vec<TransactionRecord>)` which spins a worker per client to do
       `process_client_records(Vec<TransactionRecord>)`  (`MAX_WORKERS` = 10 by default)
-
-    - [ ] test with print statements
-        - [ ] (2 hrs ) method `process_client_records(Vec<TransactionRecord>)` (this is what is passed to `spawn_task`
-          from `process_records_batch(Vec<TransactionRecord>)` per client) + unit tests. This is the core of balance
-          calculation
-          engine (take care of correct decimals, math safety, lookups, etc)
-            - unit tests: will have a vec of TransactionRecord in arrange phase, passed in to
-              `process_client_records(Vec<TransactionRecord>)` in act phase. For assertion phase, `clients_accounts` map
-              and
-              `trasnactions_history` maps are validated against expected records.
+    - [x] (2 hrs ) method `process_client_records(Vec<TransactionRecord>)` (this is what is passed to `spawn_task`
+      from `process_records_batch(Vec<TransactionRecord>)` per client) + unit tests. This is the core of balance
+      calculation
+      engine (take care of correct decimals, math safety, lookups, etc)
+        - unit tests for deposit, withdraw (withdraw ignored case as well), dispute, resolve and chargeback (account
+          freeze
+          causes other txs to be ignored)
 
 - [ ] Csv Reader Modifications
     - [ ] (1 hr) Read in a batches and When sufficient batch size is reached spawn a task for
