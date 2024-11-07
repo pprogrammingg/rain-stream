@@ -1,5 +1,5 @@
 use crate::domain::TransactionRecord;
-use crate::TransactionsProcessor::{
+use crate::transaction_processor::{
     Account, ClientId, SharedMap, TransactionId, TransactionProcessor,
 };
 use csv::{ReaderBuilder, Trim};
@@ -11,7 +11,7 @@ use thiserror::Error;
 use tokio::task;
 use tokio::task::JoinHandle;
 
-const CSV_RECORDS_CHUNK_SIZE: usize = 100;
+const CSV_RECORDS_CHUNK_SIZE: usize = 10_000;
 
 #[derive(Error, Debug)]
 pub enum CsvReadError {
@@ -39,8 +39,8 @@ pub async fn read_csv(
     transactions_history: SharedMap<TransactionId, TransactionRecord>,
     client_worker_map: SharedMap<ClientId, JoinHandle<()>>,
 ) -> Result<(), CsvReadError> {
-    println!("Begin read_csv...");
-    println!("+++++++++++++++");
+    // println!("Begin read_csv...");
+    // println!("+++++++++++++++");
 
     let file = open_csv(path)?;
     let reader = BufReader::new(file);
@@ -80,8 +80,8 @@ pub async fn read_csv(
         .await;
     }
 
-    println!("Exiting read_csv...");
-    println!("+++++++++++++++");
+    // println!("Exiting read_csv...");
+    // println!("+++++++++++++++");
 
     Ok(())
 }

@@ -1,17 +1,17 @@
-use crate::helpers::{generate_sample_csv, generate_sample_transactions};
+use crate::helpers::{generate_csv_input, generate_transactions};
 use std::fs::{create_dir_all, File};
 use std::io::{BufWriter, Write};
 use std::process::Command;
 
 #[test]
-fn test_e2e_deposit_withdrawals() {
+fn test_e2e_mixed_client_mixed_tx_types() {
     /* Arrange */
     // Generate sample transactions
-    let transactions = generate_sample_transactions();
+    let transactions = generate_transactions(32);
 
     // Generate the CSV with a specific filename
     let input_file_path = "input_1.csv";
-    let result = generate_sample_csv(input_file_path, transactions);
+    let result = generate_csv_input(input_file_path, transactions);
 
     // Assert sample input exists
     assert!(result.is_ok());

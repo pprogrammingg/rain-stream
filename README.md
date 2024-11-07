@@ -4,6 +4,38 @@ This is a hobby project for ingesting and processing large and concurrent stream
 In this example, CSV data represent transactions such as deposit, withdraw, dispute, etc being done against
 client accounts.
 
+# Performance Results
+
+Parameters hardcoded in app:
+
+```rust
+const CSV_RECORDS_CHUNK_SIZE: usize = 1000; // CSV batch read at once
+const MAX_WORKERS: usize = 4; // one worker per client is spawned in TransactionProcessor
+```
+
+| # of Records | Time Elapsed (ms) |
+|--------------|-------------------|
+| 38           | 12.633834ms       |
+| 10_0000      | 226.5ms           |
+| 100_000      | 2871ms            |
+| 1_000_000    | 28478ms           |
+
+```rust
+const CSV_RECORDS_CHUNK_SIZE: usize = 10_000; // CSV batch read at once
+const MAX_WORKERS: usize = 4; // one worker per client is spawned in TransactionProcessor
+```
+
+| # of Records | Time Elapsed (ms) |
+|--------------|-------------------|
+| 38           | 14.74ms           |
+| 10_0000      | 80.64ms           |
+| 100_000      | 643ms             |
+| 1_000_000    | 6000ms            |
+
+Very reasonably seems like increasing `CSV_RECORS_CHUNK_SIZE` 10 folds, reduces times by around 4 or 5 times.
+Furthermore, increasing `MAX_WORKERS` from 4 to 80 for 1_000_000 records made no significant difference (this is
+most likely because this is because performance test data was only based on 4 clients.
+
 # Design Decisions
 
 ## Iteration 1
@@ -116,28 +148,23 @@ The design will now change with the following improvements:
       `process_records_batch(Vec<TransactionRecord>` )
 
 - [ ] Functionality tests
-    - [ ] (1 hr) Utility: make the utility function to create CSV of N records (later we use this for performance test
+    - [x] (1 hr) Utility: make the utility function to create CSV of N records (later we use this for performance test
       as well, we need 2B eventually)
-    - [ ] (1 hr) Assertion Util create expected `Vec<TransactionRecrods>`, read output.csv into
+    - [x] (1 hr) Assertion Util create expected `Vec<TransactionRecrods>`, read output.csv into
       `Vec<TransactionRecords>` and compare
         - Tests:
-            - [ ] (1 hr) when clients contains valid withdrawal, deposit, dispute and resolve 7 client 1 , 4 client 2, 3
+            - [x] (1 hr) when clients contains valid withdrawal, deposit, dispute and resolve 7 client 1 , 4 client 2, 3
               client 3 records
-            - [ ] (1 hr) when client account is locked 7 client 1 (record 4 is a chargeback), 10 client 2 (record 5 is a
+            - [x] (1 hr) when client account is locked 7 client 1 (record 4 is a chargeback), 10 client 2 (record 5 is a
               chargeback), 3 client 3 records
-            - [ ] (1 hr) when client withdrawal is more than available balance, 5 client 1 (some withdrawals resulting
+            - [x] (1 hr) when client withdrawal is more than available balance, 5 client 1 (some withdrawals resulting
               in more than balance)
-            - [ ] (1 hr) when client records deposit, withdrawal, and in between contains dispute, resolve, dispute,
+            - [x] (1 hr) when client records deposit, withdrawal, and in between contains dispute, resolve, dispute,
               chargeback variation and some more records
 
 # Performance Tuning and Results
 
-- [ ] Performance (few chargebacks towards the end) (2 hrs - 4 hrs)
-    - [ ] 10k txs
-    - [ ] 100k txs
-    - [ ] 1M txs
-    - [ ] 50M txs
-    - [ ] 100M txs
-    - [ ] 500M txs
-    - [ ] 1B txs
-    - [ ] 2B txs
+- [x] Performance (few chargebacks towards the end) (2 hrs - 4 hrs)
+    - [x] 10k txs
+    - [x] 100k txs
+    - [x] 1M txs

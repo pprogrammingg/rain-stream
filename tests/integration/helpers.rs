@@ -13,7 +13,7 @@ pub struct Transaction {
 
 pub const CSV_FOLDER_PATH: &str = "test_csv";
 
-pub fn generate_sample_csv(
+pub fn generate_csv_input(
     file_name: &str,
     transactions: Vec<Transaction>,
 ) -> Result<PathBuf, Box<dyn Error>> {
@@ -51,73 +51,98 @@ pub fn generate_sample_csv(
     Ok(file_path)
 }
 
-pub fn generate_sample_transactions() -> Vec<Transaction> {
+pub fn generate_transactions(n: u32) -> Vec<Transaction> {
     let mut transactions = Vec::new();
+    let mut transaction_id = 1;
 
-    // Client 1
-    transactions.push(Transaction {
-        tx_type: "deposit".to_string(),
-        client_id: 1,
-        tx_id: 1,
-        amount: 1.0,
-    });
-    transactions.push(Transaction {
-        tx_type: "deposit".to_string(),
-        client_id: 1,
-        tx_id: 2,
-        amount: 2.0,
-    });
-    transactions.push(Transaction {
-        tx_type: "withdrawal".to_string(),
-        client_id: 1,
-        tx_id: 3,
-        amount: 1.5,
-    });
+    // Create 5 deposits for clients 1 and 2
+    for client_id in 1..=2 {
+        for _ in 0..n / 8 {
+            transactions.push(Transaction {
+                tx_type: "deposit".to_string(),
+                client_id,
+                tx_id: transaction_id,
+                amount: 100.0,
+            });
+            transaction_id += 1;
+        }
+    }
 
-    // Client 2
-    transactions.push(Transaction {
-        tx_type: "deposit".to_string(),
-        client_id: 2,
-        tx_id: 4,
-        amount: 2.0,
-    });
-    transactions.push(Transaction {
-        tx_type: "deposit".to_string(),
-        client_id: 2,
-        tx_id: 5,
-        amount: 3.0,
-    });
-    transactions.push(Transaction {
-        tx_type: "withdrawal".to_string(),
-        client_id: 2,
-        tx_id: 6,
-        amount: 1.0,
-    });
-    transactions.push(Transaction {
-        tx_type: "withdrawal".to_string(),
-        client_id: 2,
-        tx_id: 7,
-        amount: 1.0,
-    });
-    transactions.push(Transaction {
-        tx_type: "withdrawal".to_string(),
-        client_id: 2,
-        tx_id: 8,
-        amount: 1.0,
-    });
+    // clients 1 and 2
+    for client_id in 1..=2 {
+        for _ in 0..n / 8 {
+            transactions.push(Transaction {
+                tx_type: "withdrawal".to_string(),
+                client_id,
+                tx_id: transaction_id,
+                amount: 50.0,
+            });
+            transaction_id += 1;
+        }
+    }
 
-    // Client 3
+    // client 3
+    for _ in 0..n / 4 {
+        transactions.push(Transaction {
+            tx_type: "deposit".to_string(),
+            client_id: 3,
+            tx_id: transaction_id,
+            amount: 50.0,
+        });
+        transaction_id += 1;
+    }
+
+    // Dispute a transaction for client 3
+    let disputed_transaction = transaction_id - 2;
     transactions.push(Transaction {
-        tx_type: "deposit".to_string(),
+        tx_type: "dispute".to_string(),
         client_id: 3,
-        tx_id: 9,
-        amount: 5.0,
+        tx_id: disputed_transaction,
+        amount: 0.0,
     });
+
+    // Resolve the transaction for client 3
     transactions.push(Transaction {
-        tx_type: "withdrawal".to_string(),
+        tx_type: "resolve".to_string(),
         client_id: 3,
-        tx_id: 10,
-        amount: 2.5,
+        tx_id: disputed_transaction,
+        amount: 0.0,
+    });
+
+    // client 4
+    for _ in 0..n / 4 {
+        transactions.push(Transaction {
+            tx_type: "deposit".to_string(),
+            client_id: 4,
+            tx_id: transaction_id,
+            amount: 200.0,
+        });
+        transaction_id += 1;
+    }
+
+    // Dispute a transaction for client 4
+    let disputed_transaction = transaction_id - 2;
+    transactions.push(Transaction {
+        tx_type: "dispute".to_string(),
+        client_id: 4,
+        tx_id: disputed_transaction,
+        amount: 0.0,
+    });
+
+    // Chargeback the disputed transaction
+    transactions.push(Transaction {
+        tx_type: "chargeback".to_string(),
+        client_id: 4,
+        tx_id: disputed_transaction,
+        amount: 0.0,
+    });
+
+    // Further transactions for client 4
+    transactions.push(Transaction {
+        tx_type: "deposit".to_string(),
+        client_id: 4,
+        tx_id: transaction_id,
+        amount: 10000.0,
     });
 
     transactions
