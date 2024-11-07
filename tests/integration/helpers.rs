@@ -1,7 +1,13 @@
+use std::{
+    error::Error,
+    fs::File,
+    path::{
+        Path,
+        PathBuf,
+    },
+};
+
 use csv::Writer;
-use std::error::Error;
-use std::fs::File;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct Transaction {

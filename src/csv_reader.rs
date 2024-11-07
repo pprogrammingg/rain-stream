@@ -1,15 +1,30 @@
-use crate::domain::TransactionRecord;
-use crate::transaction_processor::{
-    Account, ClientId, SharedMap, TransactionId, TransactionProcessor,
+use std::{
+    fs::File,
+    io::BufReader,
+    path::Path,
+    sync::Arc,
 };
-use csv::{ReaderBuilder, Trim};
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
-use std::sync::Arc;
+
+use csv::{
+    ReaderBuilder,
+    Trim,
+};
 use thiserror::Error;
-use tokio::task;
-use tokio::task::JoinHandle;
+use tokio::{
+    task,
+    task::JoinHandle,
+};
+
+use crate::{
+    domain::TransactionRecord,
+    transaction_processor::{
+        Account,
+        ClientId,
+        SharedMap,
+        TransactionId,
+        TransactionProcessor,
+    },
+};
 
 const CSV_RECORDS_CHUNK_SIZE: usize = 10_000;
 
@@ -32,7 +47,6 @@ pub fn open_csv(path: String) -> Result<File, CsvReadError> {
 
 ///
 /// Read CSV records in batches, for each chunk spawn a task to process the batch.
-///
 pub async fn read_csv(
     path: String,
     client_accounts: SharedMap<ClientId, Account>,

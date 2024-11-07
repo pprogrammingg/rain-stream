@@ -1,15 +1,30 @@
-use crate::csv_reader::{read_csv, CsvReadError};
-use crate::domain::TransactionRecord;
+use std::{
+    collections::HashMap,
+    env,
+    sync::Arc,
+};
 
-use crate::transaction_processor::{Account, ClientId, SharedMap, TransactionId};
-use std::collections::HashMap;
-use std::env;
-use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::RwLock;
-use tokio::task;
-use tokio::task::JoinHandle;
-use tokio::time::Instant;
+use tokio::{
+    sync::RwLock,
+    task,
+    task::JoinHandle,
+    time::Instant,
+};
+
+use crate::{
+    csv_reader::{
+        read_csv,
+        CsvReadError,
+    },
+    domain::TransactionRecord,
+    transaction_processor::{
+        Account,
+        ClientId,
+        SharedMap,
+        TransactionId,
+    },
+};
 
 mod csv_reader;
 mod domain;
@@ -26,7 +41,6 @@ pub enum AppError {
 ///
 /// Create shared map objects for client accounts, transction history and client_worker tracking
 /// Invoke read_csv in its own task
-///
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     // Capture the start time

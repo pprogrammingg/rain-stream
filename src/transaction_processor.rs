@@ -1,8 +1,17 @@
-use crate::domain::{TransactionRecord, TransactionType};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+};
+
+use tokio::{
+    sync::RwLock,
+    task::JoinHandle,
+};
+
+use crate::domain::{
+    TransactionRecord,
+    TransactionType,
+};
 
 pub type ClientId = u16;
 pub type TransactionId = u32;
@@ -49,12 +58,10 @@ impl TransactionProcessor {
 
     /// Processes a batch of transactions for a mixed number of clients.
     /// 1. organize the batch in a map (client vs list of records)
-    /// 2. Run through the map, for each client
-    ///     a. If worker count already more than max amount of workers, continue the loop
-    ///     b. if no worker is spawned (check client_worker_map) then spawn `process_client_records`
-    ///     do not process the client unless its associated task is done.
-    ///     c. once task is done for the client, remove worker from client_work_map
-    ///     
+    /// 2. Run through the map, for each client a. If worker count already more than max amount of
+    ///    workers, continue the loop b. if no worker is spawned (check client_worker_map) then
+    ///    spawn `process_client_records` do not process the client unless its associated task is
+    ///    done. c. once task is done for the client, remove worker from client_work_map
     pub async fn process_records_batch(
         records: Vec<TransactionRecord>,
         client_accounts: SharedMap<ClientId, Account>,
@@ -130,7 +137,8 @@ impl TransactionProcessor {
                 }
             }
 
-            // Important! Remove processed clients from client_records_map (otherwise we keep processing)
+            // Important! Remove processed clients from client_records_map (otherwise we keep
+            // processing)
             for client_id in clients_being_processed {
                 client_records_map.remove(&client_id);
             }
@@ -176,7 +184,6 @@ impl TransactionProcessor {
     /// Note: only update transaction history in case of successful deposit and withdraw.
     /// Because all the other transaction types we look up an existing transaction which has an
     /// amount (deposit and withdraw types are in this category)
-    ///
     pub(crate) async fn process_client_records(
         client_id: ClientId,
         records: Vec<TransactionRecord>,
@@ -247,7 +254,8 @@ impl TransactionProcessor {
                             // println!("******************************************");
 
                             if let Some(existing_record) = read_record {
-                                // If the transaction exists, take from available funds the amount and add it to held funds
+                                // If the transaction exists, take from available funds the amount
+                                // and add it to held funds
                                 if let Some(amount) = existing_record.amount {
                                     if account.available >= amount {
                                         account.available = Self::round_to_four_decimals(
@@ -256,14 +264,16 @@ impl TransactionProcessor {
                                         account.held =
                                             Self::round_to_four_decimals(account.held + amount);
                                         // println!(
-                                        //     "Disputed transaction {}: amount {} taken from available and added to held.",
+                                        //     "Disputed transaction {}: amount {} taken from
+                                        // available and added to held.",
                                         //     record.transaction_id, amount
                                         // );
                                         // println!("******************************************");
                                     } else {
                                         // ignore
                                         // println!(
-                                        //     "WARNING!!! Available balance {} is not enough for dispute amount {}",
+                                        //     "WARNING!!! Available balance {} is not enough for
+                                        // dispute amount {}",
                                         //     account.available, amount
                                         // );
                                         // println!("******************************************");
@@ -294,17 +304,20 @@ impl TransactionProcessor {
                                             account.available + amount,
                                         );
                                         // println!(
-                                        //     "Resolved transaction {}: amount {} moved from held to available.",
+                                        //     "Resolved transaction {}: amount {} moved from held
+                                        // to available.",
                                         //     record.transaction_id, amount
                                         // );
                                         // println!("******************************************");
                                     } else {
                                         // ignore
                                         //     println!(
-                                        //         "WARNING!!! Held balance {} is not enough for resolve amount {}",
+                                        //         "WARNING!!! Held balance {} is not enough for
+                                        // resolve amount {}",
                                         //         account.held, amount
                                         //     );
-                                        //     println!("******************************************");
+                                        //     println!("******************************************"
+                                        // );
                                     }
                                 }
                             } else {
@@ -328,7 +341,8 @@ impl TransactionProcessor {
                                     account.held =
                                         Self::round_to_four_decimals(account.held - amount);
                                     // println!(
-                                    //     "Chargeback for transaction {}: amount {} deducted from held and total.",
+                                    //     "Chargeback for transaction {}: amount {} deducted from
+                                    // held and total.",
                                     //     record.transaction_id, amount
                                     // );
                                     // println!("******************************************");
@@ -383,10 +397,14 @@ impl TransactionProcessor {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::{
+        collections::HashMap,
+        sync::Arc,
+    };
+
     use tokio::sync::RwLock;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_process_client_records() {

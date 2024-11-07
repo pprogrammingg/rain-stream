@@ -1,7 +1,19 @@
-use crate::helpers::{generate_csv_input, generate_transactions};
-use std::fs::{create_dir_all, File};
-use std::io::{BufWriter, Write};
-use std::process::Command;
+use std::{
+    fs::{
+        create_dir_all,
+        File,
+    },
+    io::{
+        BufWriter,
+        Write,
+    },
+    process::Command,
+};
+
+use crate::helpers::{
+    generate_csv_input,
+    generate_transactions,
+};
 
 #[test]
 fn test_performance_10_000_records() {
