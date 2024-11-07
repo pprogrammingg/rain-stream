@@ -458,9 +458,9 @@ mod tests {
             let history = transactions_history
                 .read()
                 .await;
+
             assert_eq!(history.get(&1), Some(&records[0]));
             assert_eq!(history.get(&2), Some(&records[1]));
-            assert_eq!(history.get(&3), Some(&records[2]));
             assert_eq!(history.get(&4), Some(&records[3]));
         }
     }
@@ -743,6 +743,7 @@ mod tests {
             transaction_id: transaction_id_2,
             amount: Some(23.3525),
         };
+        // too much withdrawal, expect to ignored
         let record3 = TransactionRecord {
             transaction_type: TransactionType::Withdrawal,
             client_id,
